@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>UPS & BATTERY INSPECTOR</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    body { font-family: 'Kanit', sans-serif; background-color: #f8fafc; color: #0f172a; }
+    .mini-card { background-color: #ffffff; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); border-radius: 16px; }
+    .mini-btn { transition: all 0.2s ease; font-weight: 500; }
+    .mini-btn:hover { opacity: 0.9; transform: translateY(-1px); }
+    .mini-input { background-color: #ffffff !important; color: #0f172a !important; border: 1px solid #cbd5e1 !important; }
+    .mini-input:focus { border-color: #0f172a !important; outline: none; box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.1); }
+    @keyframes slideInRight { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    .toast-slide-in { animation: slideInRight 0.3s ease-out forwards; }
+  </style>
+</head>
+<body class="min-h-screen p-4 md:p-6 relative antialiased text-slate-800">
+
+  <div id="toastContainer" class="fixed top-5 right-5 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none"></div>
+
+  <!-- HEADER -->
+  <header class="max-w-7xl mx-auto mini-card p-4 md:p-5 flex flex-col md:flex-row items-center justify-between gap-4 mb-6">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 bg-slate-900 text-white rounded-xl flex items-center justify-center text-lg">
+        <i class="fa-solid fa-car-battery"></i>
+      </div>
+      <div>
+        <h1 class="text-lg md:text-xl font-semibold text-slate-900 tracking-tight leading-none">UPS & BATTERY INSPECTOR</h1>
+        <p class="text-slate-500 text-xs mt-1">ระบบตรวจเช็กอุปกรณ์ UPS และแบตเตอรี่ประจำงวด</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-2">
+      <button onclick="switchTab('form')" id="tabBtnForm" class="bg-slate-900 text-white mini-btn text-xs px-4 py-2.5 rounded-xl flex items-center gap-1.5">
+        <i class="fa-solid fa-plus"></i> บันทึกผลการตรวจ
+      </button>
+      <button onclick="switchTab('list')" id="tabBtnList" class="bg-slate-100 text-slate-700 mini-btn text-xs px-4 py-2.5 rounded-xl flex items-center gap-1.5">
+        <i class="fa-solid fa-table-list"></i> ประวัติการตรวจ
+      </button>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto">
+    <!-- FORM SECTION -->
+    <div id="viewForm" class="mini-card p-6 md:p-8 space-y-6">
+      <h2 class="text-base font-semibold text-slate-900 border-b border-slate-100 pb-3 flex items-center gap-2">
+        <i class="fa-solid fa-pen-to-square text-slate-500"></i> แบบฟอร์มบันทึกการตรวจสอบ
+      </h2>
+
+      <form id="inspectionForm" class="space-y-4">
+        <!-- 1. LOCATION -->
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-3">
+          <h3 class="text-xs font-semibold text-slate-500 uppercase">1. ข้อมูลสถานที่ (Location)</h3>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Build (อาคาร)</label>
+              <input type="text" id="build" required placeholder="e.g. Main Building" class="w-full mini-input rounded-xl p-2.5 text-xs">
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Floor (ชั้น)</label>
+              <input type="text" id="floor" required placeholder="e.g. 2nd Floor" class="w-full mini-input rounded-xl p-2.5 text-xs">
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Side (ฝั่ง/ตำแหน่ง)</label>
+              <input type="text" id="side" placeholder="e.g. Server Room" class="w-full mini-input rounded-xl p-2.5 text-xs">
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. DEVICE SPECS -->
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-3">
+          <h3 class="text-xs font-semibold text-slate-500 uppercase">2. ข้อมูลอุปกรณ์ (UPS & Battery)</h3>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">UPS Name/Brand</label>
+              <input type="text" id="ups" required placeholder="e.g. APC Smart-UPS" class="w-full mini-input rounded-xl p-2.5 text-xs">
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">UPS Model / Serial No.</label>
+              <input type="text" id="modelSerial" placeholder="e.g. SMT3000I / SN12345" class="w-full mini-input rounded-xl p-2.5 text-xs">
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Battery Brand/Type</label>
+              <input type="text" id="battery" placeholder="e.g. CSB 12V 7.2Ah" class="w-full mini-input rounded-xl p-2.5 text-xs">
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Battery Model / Serial No.</label>
+              <input type="text" id="batteryModelSerial" placeholder="e.g. BAT-98765" class="w-full mini-input rounded-xl p-2.5 text-xs">
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. TECHNICAL METRICS -->
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-3">
+          <h3 class="text-xs font-semibold text-slate-500 uppercase">3. ค่าทางไฟฟ้าและผลการทดสอบ</h3>
+          <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Capacity (VA/kVA)</label>
+              <input type="text" id="capacity" placeholder="3 kVA" class="w-full mini-input rounded-xl p-2.5 text-xs">
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Input Voltage (V)</label>
+              <input type="text" id="inputVoltage" placeholder="220V" class="w-full mini-input rounded-xl p-2.5 text-xs">
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Output Voltage (V)</label>
+              <input type="text" id="outputVoltage" placeholder="220V" class="w-full mini-input rounded-xl p-2.5 text-xs">
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Runtime Test (min)</label>
+              <input type="text" id="runtimeTest" placeholder="15" class="w-full mini-input rounded-xl p-2.5 text-xs">
+            </div>
+            <div class="col-span-2 md:col-span-1">
+              <label class="block text-xs font-medium text-slate-600 mb-1">Load (%)</label>
+              <input type="text" id="load" placeholder="45%" class="w-full mini-input rounded-xl p-2.5 text-xs">
+            </div>
+          </div>
+        </div>
+
+        <!-- 4. STATUS & SCHEDULE -->
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-3">
+          <h3 class="text-xs font-semibold text-slate-500 uppercase">4. สถานะและกำหนดการ</h3>
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Status (สถานะ)</label>
+              <select id="status" class="w-full mini-input rounded-xl p-2.5 text-xs">
+                <option value="Normal">Normal (ปกติ)</option>
+                <option value="Warning">Warning (เตือน)</option>
+                <option value="Fault">Fault (ชำรุด)</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Priority (ความสำคัญ)</label>
+              <select id="priority" class="w-full mini-input rounded-xl p-2.5 text-xs">
+                <option value="Low">Low</option>
+                <option value="Medium">Medium</option>
+                <option value="High">High</option>
+                <option value="Urgent">Urgent</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Inspection Date</label>
+              <input type="date" id="inspectionDate" required class="w-full mini-input rounded-xl p-2.5 text-xs">
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Next PM Date</label>
+              <input type="date" id="nextPmDate" class="w-full mini-input rounded-xl p-2.5 text-xs">
+            </div>
+          </div>
+        </div>
+
+        <!-- 5. PHOTO UPLOAD & REMARKS -->
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-3">
+          <h3 class="text-xs font-semibold text-slate-500 uppercase">5. รูปถ่ายและผู้ตรวจ (Picture & Inspector)</h3>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1"><i class="fa-solid fa-camera mr-1"></i> ถ่ายรูป/อัปโหลดภาพ</label>
+              <input type="file" id="pictureInput" accept="image/*" capture="environment" onchange="previewImage(event)" class="w-full mini-input rounded-xl p-2 text-xs">
+              
+              <div id="imagePreviewContainer" class="hidden mt-3 relative">
+                <img id="imagePreview" class="w-full h-40 object-cover rounded-xl border border-slate-200">
+                <button type="button" onclick="removeImage()" class="absolute top-2 right-2 bg-rose-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs">
+                  <i class="fa-solid fa-xmark"></i>
+                </button>
+              </div>
+            </div>
+
+            <div class="space-y-3">
+              <div>
+                <label class="block text-xs font-medium text-slate-600 mb-1">Inspector (ผู้ตรวจสอบ)</label>
+                <input type="text" id="inspector" required placeholder="ชื่อผู้ตรวจ" class="w-full mini-input rounded-xl p-2.5 text-xs">
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-slate-600 mb-1">Remark (หมายเหตุ)</label>
+                <textarea id="remark" rows="2" placeholder="รายละเอียดเพิ่มเติม..." class="w-full mini-input rounded-xl p-2.5 text-xs"></textarea>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <button type="submit" class="w-full bg-slate-900 hover:bg-slate-800 text-white mini-btn py-3 rounded-xl text-xs font-medium flex items-center justify-center gap-2">
+          <i class="fa-solid fa-floppy-disk"></i> บันทึกข้อมูลการตรวจสอบ
+        </button>
+      </form>
+    </div>
+
+    <!-- LIST SECTION -->
+    <div id="viewList" class="hidden space-y-4">
+      <div class="mini-card p-5 space-y-4">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div class="flex items-center gap-2">
+            <h2 class="text-base font-semibold text-slate-900">รายการประวัติการตรวจสอบ</h2>
+            <span id="recordCount" class="bg-slate-100 text-slate-600 text-xs px-2.5 py-0.5 rounded-full font-medium">0 รายการ</span>
+          </div>
+          <button onclick="exportToExcel()" class="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 mini-btn px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 self-start md:self-auto">
+            <i class="fa-solid fa-file-excel"></i> Export Excel
+          </button>
+        </div>
+
+        <div class="overflow-x-auto rounded-xl border border-slate-100">
+          <table class="w-full text-left text-xs text-slate-700">
+            <thead class="bg-slate-50 text-slate-500 font-medium text-[11px] uppercase border-b border-slate-100">
+              <tr>
+                <th class="p-3">Build/Floor/Side</th>
+                <th class="p-3">UPS Details</th>
+                <th class="p-3">Battery</th>
+                <th class="p-3">Tech Specs</th>
+                <th class="p-3">Status</th>
+                <th class="p-3">Date / Inspector</th>
+                <th class="p-3">Picture</th>
+                <th class="p-3 text-center">Action</th>
+              </tr>
+            </thead>
+            <tbody id="inspectionTableBody" class="divide-y divide-slate-100 bg-white"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    // อัปเดตการเชื่อมต่อ Supabase ด้วย Key ของโปรเจกต์ UPS-Battery-Inspector
+    const SUPABASE_URL = 'https://cnjatybztbzbouirjmya.supabase.co';
+    const SUPABASE_ANON_KEY = 'sb_publishable_JY__6Oud9QFaaItXglyYIQ_mrF5974b';
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    let rawRecords = [];
+    let currentBase64Image = '';
+
+    function switchTab(tab) {
+      document.getElementById('viewForm').classList.toggle('hidden', tab !== 'form');
+      document.getElementById('viewList').classList.toggle('hidden', tab !== 'list');
+      document.getElementById('tabBtnForm').className = tab === 'form' ? 'bg-slate-900 text-white mini-btn text-xs px-4 py-2.5 rounded-xl flex items-center gap-1.5' : 'bg-slate-100 text-slate-700 mini-btn text-xs px-4 py-2.5 rounded-xl flex items-center gap-1.5';
+      document.getElementById('tabBtnList').className = tab === 'list' ? 'bg-slate-900 text-white mini-btn text-xs px-4 py-2.5 rounded-xl flex items-center gap-1.5' : 'bg-slate-100 text-slate-700 mini-btn text-xs px-4 py-2.5 rounded-xl flex items-center gap-1.5';
+      if (tab === 'list') fetchRecords();
+    }
+
+    function previewImage(event) {
+      const file = event.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          currentBase64Image = e.target.result;
+          document.getElementById('imagePreview').src = currentBase64Image;
+          document.getElementById('imagePreviewContainer').classList.remove('hidden');
+        }
+        reader.readAsDataURL(file);
+      }
+    }
+
+    function removeImage() {
+      currentBase64Image = '';
+      document.getElementById('pictureInput').value = '';
+      document.getElementById('imagePreviewContainer').classList.add('hidden');
+    }
+
+    function showToast(title, message, type = 'success') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      toast.className = `pointer-events-auto p-3.5 rounded-xl border shadow-sm flex items-start gap-3 toast-slide-in ${type === 'error' ? 'bg-rose-50 border-rose-200 text-rose-800' : 'bg-slate-900 border-slate-800 text-white'}`;
+      toast.innerHTML = `<div class="text-base pt-0.5"><i class="fa-solid ${type === 'error' ? 'fa-circle-exclamation text-rose-500' : 'fa-circle-check text-emerald-400'}"></i></div><div><h4 class="text-xs font-semibold">${title}</h4><p class="text-xs opacity-90">${message}</p></div>`;
+      container.appendChild(toast);
+      setTimeout(() => toast.remove(), 3500);
+    }
+
+    document.getElementById('inspectionDate').value = new Date().toISOString().split('T')[0];
+
+    document.getElementById('inspectionForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const newRecord = {
+        build: document.getElementById('build').value,
+        floor: document.getElementById('floor').value,
+        side: document.getElementById('side').value,
+        ups: document.getElementById('ups').value,
+        model_serial_no: document.getElementById('modelSerial').value,
+        battery: document.getElementById('battery').value,
+        battery_model_serial_no: document.getElementById('batteryModelSerial').value,
+        capacity: document.getElementById('capacity').value,
+        input_voltage: document.getElementById('inputVoltage').value,
+        output_voltage: document.getElementById('outputVoltage').value,
+        runtime_test: document.getElementById('runtimeTest').value,
+        load_percent: document.getElementById('load').value,
+        status: document.getElementById('status').value,
+        priority: document.getElementById('priority').value,
+        inspection_date: document.getElementById('inspectionDate').value,
+        next_pm_date: document.getElementById('nextPmDate').value,
+        picture: currentBase64Image,
+        inspector: document.getElementById('inspector').value,
+        remark: document.getElementById('remark').value
+      };
+
+      const { error } = await supabaseClient.from('ups_inspections').insert([newRecord]);
+      if (error) {
+        showToast('ERROR', error.message, 'error');
+      } else {
+        showToast('SUCCESS', 'บันทึกข้อมูลเรียบร้อยแล้ว', 'success');
+        e.target.reset();
+        removeImage();
+        document.getElementById('inspectionDate').value = new Date().toISOString().split('T')[0];
+        switchTab('list');
+      }
+    });
+
+    async function fetchRecords() {
+      const { data, error } = await supabaseClient.from('ups_inspections').select('*').order('created_at', { ascending: false });
+      rawRecords = data || [];
+      document.getElementById('recordCount').innerText = `${rawRecords.length} รายการ`;
+      renderTable();
+    }
+
+    function renderTable() {
+      const tbody = document.getElementById('inspectionTableBody');
+      tbody.innerHTML = '';
+
+      rawRecords.forEach(r => {
+        const tr = document.createElement('tr');
+        tr.className = "hover:bg-slate-50 transition-colors";
+        
+        let statusBadge = 'bg-emerald-50 text-emerald-700 border-emerald-200';
+        if (r.status === 'Warning') statusBadge = 'bg-amber-50 text-amber-700 border-amber-200';
+        if (r.status === 'Fault') statusBadge = 'bg-rose-50 text-rose-700 border-rose-200';
+
+        tr.innerHTML = `
+          <td class="p-3">
+            <span class="font-semibold text-slate-900 block">${r.build || '-'}</span>
+            <span class="text-[10px] text-slate-500">Floor: ${r.floor || '-'} | Side: ${r.side || '-'}</span>
+          </td>
+          <td class="p-3">
+            <span class="font-medium block">${r.ups || '-'}</span>
+            <span class="text-[10px] text-slate-400">S/N: ${r.model_serial_no || '-'}</span>
+          </td>
+          <td class="p-3">
+            <span class="block">${r.battery || '-'}</span>
+            <span class="text-[10px] text-slate-400">S/N: ${r.battery_model_serial_no || '-'}</span>
+          </td>
+          <td class="p-3 text-[10px] text-slate-600">
+            Cap: ${r.capacity || '-'} | In: ${r.input_voltage || '-'} | Out: ${r.output_voltage || '-'}<br>
+            Run: ${r.runtime_test || '-'} min | Load: ${r.load_percent || '-'}
+          </td>
+          <td class="p-3">
+            <span class="px-2 py-0.5 rounded-full text-[10px] border ${statusBadge}">${r.status}</span>
+            <span class="text-[10px] text-slate-400 block mt-0.5">Priority: ${r.priority}</span>
+          </td>
+          <td class="p-3 text-[11px]">
+            <span class="block font-medium">${r.inspection_date || '-'}</span>
+            <span class="text-[10px] text-slate-500">Inspector: ${r.inspector || '-'}</span>
+          </td>
+          <td class="p-3">
+            ${r.picture ? `<img src="${r.picture}" class="w-10 h-10 object-cover rounded-lg border border-slate-200 cursor-pointer" onclick="window.open('${r.picture}')">` : '<span class="text-slate-300">-</span>'}
+          </td>
+          <td class="p-3 text-center">
+            <button onclick="deleteRecord(${r.id})" class="text-rose-500 hover:text-rose-700 p-1 rounded-lg text-xs" title="Delete">
+              <i class="fa-solid fa-trash"></i>
+            </button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function deleteRecord(id) {
+      if (confirm('ยืนยันลบรายการนี้?')) {
+        await supabaseClient.from('ups_inspections').delete().eq('id', id);
+        fetchRecords();
+      }
+    }
+
+    function exportToExcel() {
+      if (rawRecords.length === 0) return showToast('EMPTY', 'ไม่มีข้อมูลให้ส่งออก', 'error');
+      
+      const excelData = rawRecords.map(r => ({
+        'Build': r.build,
+        'Floor': r.floor,
+        'Side': r.side,
+        'UPS': r.ups,
+        'Model / Serial No.': r.model_serial_no,
+        'Battery': r.battery,
+        'Battery Model / Serial No.': r.battery_model_serial_no,
+        'Capacity (VA/kVA)': r.capacity,
+        'Input Voltage (V)': r.input_voltage,
+        'Output Voltage (V)': r.output_voltage,
+        'Runtime Test (min)': r.runtime_test,
+        'Load (%)': r.load_percent,
+        'Status': r.status,
+        'Priority': r.priority,
+        'Inspection Date': r.inspection_date,
+        'Next PM Date': r.next_pm_date,
+        'Inspector': r.inspector,
+        'Remark': r.remark
+      }));
+
+      const worksheet = XLSX.utils.json_to_sheet(excelData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "UPS_Checklist");
+      XLSX.writeFile(workbook, `UPS_Inspection_${new Date().toISOString().split('T')[0]}.xlsx`);
+    }
+  </script>
+</body>
+</html>
