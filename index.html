@@ -183,7 +183,7 @@
           </div>
         </div>
 
-        <button type="submit" class="w-full bg-slate-900 hover:bg-slate-800 text-white mini-btn py-3 rounded-xl text-xs font-medium flex items-center justify-center gap-2">
+        <button type="submit" id="submitBtn" class="w-full bg-slate-900 hover:bg-slate-800 text-white mini-btn py-3 rounded-xl text-xs font-medium flex items-center justify-center gap-2">
           <i class="fa-solid fa-floppy-disk"></i> บันทึกข้อมูลการตรวจสอบ
         </button>
       </form>
@@ -224,9 +224,9 @@
   </main>
 
   <script>
-    // อัปเดตการเชื่อมต่อ Supabase ด้วย Key ของโปรเจกต์ UPS-Battery-Inspector
+    // ⚠️ นำค่า anon key (ตัวยาวๆ ขึ้นต้นด้วย eyJ...) มาวางแทนที่ตรงนี้ครับ
     const SUPABASE_URL = 'https://cnjatybztbzbouirjmya.supabase.co';
-    const SUPABASE_ANON_KEY = 'sb_publishable_JY__6Oud9QFaaItXglyYIQ_mrF5974b';
+    const SUPABASE_ANON_KEY = 'วาง_ANON_KEY_ตัวจริง_ขึ้นต้นด้วย_eyJ_ตรงนี้';
     const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
     let rawRecords = [];
@@ -240,14 +240,35 @@
       if (tab === 'list') fetchRecords();
     }
 
+    // ฟังก์ชันย่อขนาดรูปภาพอัตโนมัติ เพื่อป้องกันส่งไฟล์ใหญ่เกินไป
     function previewImage(event) {
       const file = event.target.files[0];
       if (file) {
         const reader = new FileReader();
         reader.onload = function(e) {
-          currentBase64Image = e.target.result;
-          document.getElementById('imagePreview').src = currentBase64Image;
-          document.getElementById('imagePreviewContainer').classList.remove('hidden');
+          const img = new Image();
+          img.onload = function() {
+            const canvas = document.createElement('canvas');
+            let width = img.width;
+            let height = img.height;
+            const max_size = 800; // ปรับขนาดรูปไม่ให้เกิน 800px
+
+            if (width > height) {
+              if (width > max_size) { height *= max_size / width; width = max_size; }
+            } else {
+              if (height > max_size) { width *= max_size / height; height = max_size; }
+            }
+
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+
+            currentBase64Image = canvas.toDataURL('image/jpeg', 0.7); // บีบอัดคุณภาพ 70%
+            document.getElementById('imagePreview').src = currentBase64Image;
+            document.getElementById('imagePreviewContainer').classList.remove('hidden');
+          }
+          img.src = e.target.result;
         }
         reader.readAsDataURL(file);
       }
@@ -265,13 +286,17 @@
       toast.className = `pointer-events-auto p-3.5 rounded-xl border shadow-sm flex items-start gap-3 toast-slide-in ${type === 'error' ? 'bg-rose-50 border-rose-200 text-rose-800' : 'bg-slate-900 border-slate-800 text-white'}`;
       toast.innerHTML = `<div class="text-base pt-0.5"><i class="fa-solid ${type === 'error' ? 'fa-circle-exclamation text-rose-500' : 'fa-circle-check text-emerald-400'}"></i></div><div><h4 class="text-xs font-semibold">${title}</h4><p class="text-xs opacity-90">${message}</p></div>`;
       container.appendChild(toast);
-      setTimeout(() => toast.remove(), 3500);
+      setTimeout(() => toast.remove(), 4000);
     }
 
     document.getElementById('inspectionDate').value = new Date().toISOString().split('T')[0];
 
     document.getElementById('inspectionForm').addEventListener('submit', async (e) => {
       e.preventDefault();
+      const submitBtn = document.getElementById('submitBtn');
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> กำลังบันทึก...`;
+
       const newRecord = {
         build: document.getElementById('build').value,
         floor: document.getElementById('floor').value,
@@ -288,29 +313,39 @@
         status: document.getElementById('status').value,
         priority: document.getElementById('priority').value,
         inspection_date: document.getElementById('inspectionDate').value,
-        next_pm_date: document.getElementById('nextPmDate').value,
+        next_pm_date: document.getElementById('nextPmDate').value || null,
         picture: currentBase64Image,
         inspector: document.getElementById('inspector').value,
         remark: document.getElementById('remark').value
       };
 
-      const { error } = await supabaseClient.from('ups_inspections').insert([newRecord]);
-      if (error) {
-        showToast('ERROR', error.message, 'error');
-      } else {
+      try {
+        const { error } = await supabaseClient.from('ups_inspections').insert([newRecord]);
+        if (error) throw error;
+
         showToast('SUCCESS', 'บันทึกข้อมูลเรียบร้อยแล้ว', 'success');
         e.target.reset();
         removeImage();
         document.getElementById('inspectionDate').value = new Date().toISOString().split('T')[0];
         switchTab('list');
+      } catch (err) {
+        showToast('ERROR', err.message || 'บันทึกไม่สำเร็จ', 'error');
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = `<i class="fa-solid fa-floppy-disk"></i> บันทึกข้อมูลการตรวจสอบ`;
       }
     });
 
     async function fetchRecords() {
-      const { data, error } = await supabaseClient.from('ups_inspections').select('*').order('created_at', { ascending: false });
-      rawRecords = data || [];
-      document.getElementById('recordCount').innerText = `${rawRecords.length} รายการ`;
-      renderTable();
+      try {
+        const { data, error } = await supabaseClient.from('ups_inspections').select('*').order('created_at', { ascending: false });
+        if (error) throw error;
+        rawRecords = data || [];
+        document.getElementById('recordCount').innerText = `${rawRecords.length} รายการ`;
+        renderTable();
+      } catch (err) {
+        showToast('ERROR', err.message || 'ดึงข้อมูลไม่สำเร็จ', 'error');
+      }
     }
 
     function renderTable() {
