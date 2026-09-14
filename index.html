@@ -76,27 +76,26 @@
         <div class="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-3">
           <div class="flex items-center justify-between">
             <h3 class="text-xs font-semibold text-slate-500 uppercase">2. ข้อมูลอุปกรณ์ (UPS & Battery)</h3>
-            <!-- ปุ่มลัดสำหรับเลือก Preset รุ่นมาตรฐาน -->
             <button type="button" onclick="applyModelPreset()" class="text-[11px] bg-slate-200 hover:bg-slate-300 text-slate-700 px-2.5 py-1 rounded-lg transition-colors font-medium">
-              <i class="fa-solid fa-wand-magic-sparkles text-amber-500 mr-1"></i> ใส่รุ่น SRVPM2KRIL / SRV72RLBP-9A
+              <i class="fa-solid fa-wand-magic-sparkles text-amber-500 mr-1"></i> เติมรุ่นอัตโนมัติ
             </button>
           </div>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
-              <label class="block text-xs font-medium text-slate-600 mb-1">UPS Name/Brand</label>
-              <input type="text" id="ups" required placeholder="e.g. Easy UPS SRVPM2KRIL" class="w-full mini-input rounded-xl p-2.5 text-xs">
+              <label class="block text-xs font-medium text-slate-600 mb-1">UPS (รุ่น)</label>
+              <input type="text" id="ups" required value="SRVPM2KRIL" class="w-full mini-input rounded-xl p-2.5 text-xs">
             </div>
             <div>
               <label class="block text-xs font-medium text-slate-600 mb-1">UPS Model / Serial No.</label>
-              <input type="text" id="modelSerial" placeholder="SRVPM2KRIL" class="w-full mini-input rounded-xl p-2.5 text-xs">
+              <input type="text" id="modelSerial" placeholder="e.g. 852221400268" class="w-full mini-input rounded-xl p-2.5 text-xs">
             </div>
             <div>
-              <label class="block text-xs font-medium text-slate-600 mb-1">Battery Brand/Type</label>
-              <input type="text" id="battery" placeholder="e.g. Easy UPS Battery Pack" class="w-full mini-input rounded-xl p-2.5 text-xs">
+              <label class="block text-xs font-medium text-slate-600 mb-1">Battery (รุ่น)</label>
+              <input type="text" id="battery" value="SRV72RLBP-9A" class="w-full mini-input rounded-xl p-2.5 text-xs">
             </div>
             <div>
               <label class="block text-xs font-medium text-slate-600 mb-1">Battery Model / Serial No.</label>
-              <input type="text" id="batteryModelSerial" placeholder="SRV72RLBP-9A" class="w-full mini-input rounded-xl p-2.5 text-xs">
+              <input type="text" id="batteryModelSerial" placeholder="e.g. 852203A02477" class="w-full mini-input rounded-xl p-2.5 text-xs">
             </div>
           </div>
         </div>
@@ -107,15 +106,15 @@
           <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
             <div>
               <label class="block text-xs font-medium text-slate-600 mb-1">Capacity (VA/kVA)</label>
-              <input type="text" id="capacity" placeholder="2 kVA / 1600W" class="w-full mini-input rounded-xl p-2.5 text-xs">
+              <input type="text" id="capacity" placeholder="2 kVA" class="w-full mini-input rounded-xl p-2.5 text-xs">
             </div>
             <div>
               <label class="block text-xs font-medium text-slate-600 mb-1">Input Voltage (V)</label>
-              <input type="text" id="inputVoltage" placeholder="220V" class="w-full mini-input rounded-xl p-2.5 text-xs">
+              <input type="text" id="inputVoltage" placeholder="220" class="w-full mini-input rounded-xl p-2.5 text-xs">
             </div>
             <div>
               <label class="block text-xs font-medium text-slate-600 mb-1">Output Voltage (V)</label>
-              <input type="text" id="outputVoltage" placeholder="220V" class="w-full mini-input rounded-xl p-2.5 text-xs">
+              <input type="text" id="outputVoltage" placeholder="220" class="w-full mini-input rounded-xl p-2.5 text-xs">
             </div>
             <div>
               <label class="block text-xs font-medium text-slate-600 mb-1">Runtime Test (min)</label>
@@ -123,7 +122,7 @@
             </div>
             <div class="col-span-2 md:col-span-1">
               <label class="block text-xs font-medium text-slate-600 mb-1">Load (%)</label>
-              <input type="text" id="load" placeholder="45%" class="w-full mini-input rounded-xl p-2.5 text-xs">
+              <input type="text" id="load" placeholder="100%" class="w-full mini-input rounded-xl p-2.5 text-xs">
             </div>
           </div>
         </div>
@@ -135,7 +134,8 @@
             <div>
               <label class="block text-xs font-medium text-slate-600 mb-1">Status (สถานะ)</label>
               <select id="status" class="w-full mini-input rounded-xl p-2.5 text-xs">
-                <option value="Normal">Normal (ปกติ)</option>
+                <option value="OK">OK (ปกติ)</option>
+                <option value="Need Replace">Need Replace (ต้องเปลี่ยน)</option>
                 <option value="Warning">Warning (เตือน)</option>
                 <option value="Fault">Fault (ชำรุด)</option>
               </select>
@@ -249,14 +249,10 @@
     let rawRecords = [];
     let currentBase64Image = '';
 
-    // ฟังก์ชันช่วยใส่รุ่น UPS และ Battery อัตโนมัติ
     function applyModelPreset() {
-      document.getElementById('ups').value = 'APC Easy UPS SRV 2000VA';
-      document.getElementById('modelSerial').value = 'SRVPM2KRIL';
-      document.getElementById('battery').value = 'APC Easy UPS Battery Pack';
-      document.getElementById('batteryModelSerial').value = 'SRV72RLBP-9A';
-      document.getElementById('capacity').value = '2 kVA / 1600W';
-      showToast('PRESET APPLIED', 'กรอกข้อมูลรุ่น SRVPM2KRIL เรียบร้อยแล้ว', 'success');
+      document.getElementById('ups').value = 'SRVPM2KRIL';
+      document.getElementById('battery').value = 'SRV72RLBP-9A';
+      showToast('PRESET APPLIED', 'ตั้งค่ารุ่น SRVPM2KRIL / SRV72RLBP-9A เรียบร้อย', 'success');
     }
 
     function switchTab(tab) {
@@ -358,6 +354,7 @@
         showToast('SUCCESS', 'บันทึกข้อมูลเรียบร้อยแล้ว', 'success');
         e.target.reset();
         removeImage();
+        applyModelPreset();
         document.getElementById('inspectionDate').value = todayFormatted;
         switchTab('list');
       } catch (err) {
@@ -390,7 +387,7 @@
         tr.className = "hover:bg-slate-50 transition-colors";
         
         let statusBadge = 'bg-emerald-50 text-emerald-700 border-emerald-200';
-        if (r.status === 'Warning') statusBadge = 'bg-amber-50 text-amber-700 border-amber-200';
+        if (r.status === 'Warning' || r.status === 'Need Replace') statusBadge = 'bg-amber-50 text-amber-700 border-amber-200';
         if (r.status === 'Fault') statusBadge = 'bg-rose-50 text-rose-700 border-rose-200';
 
         tr.innerHTML = `
@@ -468,6 +465,7 @@
       XLSX.writeFile(workbook, `UPS_Inspection_${new Date().toISOString().split('T')[0]}.xlsx`);
     }
 
+    // ฟังก์ชัน Import อ่านค่าตรงตามหัวตาราง Excel ของคุณ
     function importFromExcel(event) {
       const file = event.target.files[0];
       if (!file) return;
@@ -479,7 +477,7 @@
           const workbook = XLSX.read(data, { type: 'array' });
           const firstSheetName = workbook.SheetNames[0];
           const worksheet = workbook.Sheets[firstSheetName];
-          const jsonData = XLSX.utils.sheet_to_json(worksheet);
+          const jsonData = XLSX.utils.sheet_to_json(worksheet, { range: 2 }); // ข้าม 2 บรรทัดแรกไปอ่านที่ Row 3 (Header)
 
           if (jsonData.length === 0) {
             showToast('EMPTY', 'ไม่พบข้อมูลในไฟล์ Excel', 'error');
@@ -490,16 +488,16 @@
             build: String(row['Build'] || row['อาคาร'] || ''),
             floor: String(row['Floor'] || row['ชั้น'] || ''),
             side: String(row['Side'] || row['ตำแหน่ง'] || ''),
-            ups: String(row['UPS'] || row['ชื่อ UPS'] || 'SRVPM2KRIL'),
-            model_serial_no: String(row['Model / Serial No.'] || row['ซีเรียล UPS'] || 'SRVPM2KRIL'),
-            battery: String(row['Battery'] || row['แบตเตอรี่'] || 'SRV72RLBP-9A'),
-            battery_model_serial_no: String(row['Battery Model / Serial No.'] || row['ซีเรียลแบต'] || 'SRV72RLBP-9A'),
+            ups: String(row['UPS'] || 'SRVPM2KRIL'),
+            model_serial_no: String(row['Model / Serial No.'] || row['ซีเรียล UPS'] || ''),
+            battery: String(row['Battery'] || 'SRV72RLBP-9A'),
+            battery_model_serial_no: String(row['Model / Serial No._1'] || row['Battery Model / Serial No.'] || row['ซีเรียลแบต'] || ''),
             capacity: String(row['Capacity (VA/kVA)'] || row['ความจุ'] || ''),
             input_voltage: String(row['Input Voltage (V)'] || row['ไฟเข้า'] || ''),
             output_voltage: String(row['Output Voltage (V)'] || row['ไฟออก'] || ''),
             runtime_test: String(row['Runtime Test (min)'] || row['เวลาทดสอบ'] || ''),
             load_percent: String(row['Load (%)'] || row['โหลด'] || ''),
-            status: String(row['Status'] || row['สถานะ'] || 'Normal'),
+            status: String(row['Status'] || row['สถานะ'] || 'OK'),
             priority: String(row['Priority'] || row['ความสำคัญ'] || 'Low'),
             inspection_date: row['Inspection Date'] || row['วันที่ตรวจ'] || todayFormatted,
             next_pm_date: row['Next PM Date'] || row['กำหนด PM'] || null,
