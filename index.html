@@ -224,25 +224,18 @@
   </main>
 
   <script>
-    // ⚠️ ใส่ ANON_KEY ตัวจริง (ขึ้นต้นด้วย eyJ...) ตรงนี้ครับ
     const SUPABASE_URL = 'https://cnjatybztbzbouirjmya.supabase.co';
-    const SUPABASE_ANON_KEY = 'วาง_ANON_KEY_ตัวจริง_ขึ้นต้นด้วย_eyJ_ตรงนี้';
-    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNuamF0eWJ6dGJ6Ym91aXJqbXlhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkwNTk0NTksImV4cCI6MjEwNDYzNTQ1OX0.xwv2hopsEBz7bwFPQ4USRVPixfgY21qECnXuDeoLkmU';
+
+    let supabaseClient = null;
+    try {
+      supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    } catch (e) {
+      console.error('Supabase Init Error:', e);
+    }
 
     let rawRecords = [];
     let currentBase64Image = '';
-
-    // ฟังก์ชันช่วยแปลงวันที่ให้เป็นรูปแบบ YYYY-MM-DD (ค.ศ.) ป้องกันมือถือส่ง พ.ศ. เข้า Supabase
-    function formatDateToISO(dateString) {
-      if (!dateString) return null;
-      const d = new Date(dateString);
-      if (isNaN(d.getTime())) return dateString;
-      let year = d.getFullYear();
-      if (year > 2400) year -= 543; // แปลง พ.ศ. เป็น ค.ศ.
-      const month = String(d.getMonth() + 1).padStart(2, '0');
-      const day = String(d.getDate()).padStart(2, '0');
-      return `${year}-${month}-${day}`;
-    }
 
     function switchTab(tab) {
       document.getElementById('viewForm').classList.toggle('hidden', tab !== 'form');
@@ -262,7 +255,7 @@
             const canvas = document.createElement('canvas');
             let width = img.width;
             let height = img.height;
-            const max_size = 800;
+            const max_size = 500;
 
             if (width > height) {
               if (width > max_size) { height *= max_size / width; width = max_size; }
@@ -275,7 +268,7 @@
             const ctx = canvas.getContext('2d');
             ctx.drawImage(img, 0, 0, width, height);
 
-            currentBase64Image = canvas.toDataURL('image/jpeg', 0.7);
+            currentBase64Image = canvas.toDataURL('image/jpeg', 0.5);
             document.getElementById('imagePreview').src = currentBase64Image;
             document.getElementById('imagePreviewContainer').classList.remove('hidden');
           }
@@ -300,8 +293,9 @@
       setTimeout(() => toast.remove(), 4000);
     }
 
-    const todayStr = new Date().toISOString().split('T')[0];
-    document.getElementById('inspectionDate').value = todayStr;
+    const today = new Date();
+    const todayFormatted = today.toISOString().split('T')[0];
+    document.getElementById('inspectionDate').value = todayFormatted;
 
     document.getElementById('inspectionForm').addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -309,8 +303,8 @@
       submitBtn.disabled = true;
       submitBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> กำลังบันทึก...`;
 
-      const rawInspectionDate = document.getElementById('inspectionDate').value;
-      const rawNextPmDate = document.getElementById('nextPmDate').value;
+      const inspDateVal = document.getElementById('inspectionDate').value || todayFormatted;
+      const nextPmVal = document.getElementById('nextPmDate').value || null;
 
       const newRecord = {
         build: document.getElementById('build').value,
@@ -327,24 +321,25 @@
         load_percent: document.getElementById('load').value,
         status: document.getElementById('status').value,
         priority: document.getElementById('priority').value,
-        inspection_date: formatDateToISO(rawInspectionDate),
-        next_pm_date: rawNextPmDate ? formatDateToISO(rawNextPmDate) : null,
+        inspection_date: inspDateVal,
+        next_pm_date: nextPmVal,
         picture: currentBase64Image,
         inspector: document.getElementById('inspector').value,
         remark: document.getElementById('remark').value
       };
 
       try {
+        if (!supabaseClient) throw new Error("Supabase Client ขัดข้อง");
         const { error } = await supabaseClient.from('ups_inspections').insert([newRecord]);
         if (error) throw error;
 
         showToast('SUCCESS', 'บันทึกข้อมูลเรียบร้อยแล้ว', 'success');
         e.target.reset();
         removeImage();
-        document.getElementById('inspectionDate').value = todayStr;
+        document.getElementById('inspectionDate').value = todayFormatted;
         switchTab('list');
       } catch (err) {
-        showToast('ERROR', err.message || JSON.stringify(err), 'error');
+        showToast('ERROR', err.message || 'บันทึกไม่สำเร็จ', 'error');
       } finally {
         submitBtn.disabled = false;
         submitBtn.innerHTML = `<i class="fa-solid fa-floppy-disk"></i> บันทึกข้อมูลการตรวจสอบ`;
@@ -353,13 +348,14 @@
 
     async function fetchRecords() {
       try {
+        if (!supabaseClient) return;
         const { data, error } = await supabaseClient.from('ups_inspections').select('*').order('created_at', { ascending: false });
         if (error) throw error;
         rawRecords = data || [];
         document.getElementById('recordCount').innerText = `${rawRecords.length} รายการ`;
         renderTable();
       } catch (err) {
-        showToast('ERROR', err.message || JSON.stringify(err), 'error');
+        showToast('ERROR', err.message || 'ดึงข้อมูลไม่สำเร็จ', 'error');
       }
     }
 
