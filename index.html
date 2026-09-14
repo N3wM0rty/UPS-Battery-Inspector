@@ -7,7 +7,9 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  
+  <!-- ExcelJS Library สำหรับฝังรูปและดึงรูปจาก Excel -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     body { font-family: 'Kanit', sans-serif; background-color: #f8fafc; color: #0f172a; }
@@ -209,7 +211,7 @@
               <input type="file" id="excelFileInput" accept=".xlsx, .xls" onchange="importFromExcel(event)" class="hidden">
             </label>
             <button onclick="exportToExcel()" class="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 mini-btn px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5">
-              <i class="fa-solid fa-file-excel"></i> Export Excel
+              <i class="fa-solid fa-file-excel"></i> Export Excel (พร้อมรูป)
             </button>
           </div>
         </div>
@@ -435,83 +437,204 @@
       }
     }
 
-    function exportToExcel() {
+    // 🚀 ฟังก์ชัน EXPORT EXCEL แบบฝังรูปภาพลงในไฟล์ (Embedded Image using ExcelJS)
+    async function exportToExcel() {
       if (rawRecords.length === 0) return showToast('EMPTY', 'ไม่มีข้อมูลให้ส่งออก', 'error');
-      
-      const excelData = rawRecords.map(r => ({
-        'Build': r.build,
-        'Floor': r.floor,
-        'Side': r.side,
-        'UPS': r.ups,
-        'Model / Serial No.': r.model_serial_no,
-        'Battery': r.battery,
-        'Battery Model / Serial No.': r.battery_model_serial_no,
-        'Capacity (VA/kVA)': r.capacity,
-        'Input Voltage (V)': r.input_voltage,
-        'Output Voltage (V)': r.output_voltage,
-        'Runtime Test (min)': r.runtime_test,
-        'Load (%)': r.load_percent,
-        'Status': r.status,
-        'Priority': r.priority,
-        'Inspection Date': r.inspection_date,
-        'Next PM Date': r.next_pm_date,
-        'Inspector': r.inspector,
-        'Remark': r.remark
-      }));
 
-      const worksheet = XLSX.utils.json_to_sheet(excelData);
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, "UPS_Checklist");
-      XLSX.writeFile(workbook, `UPS_Inspection_${new Date().toISOString().split('T')[0]}.xlsx`);
+      showToast('EXPORTING', 'กำลังสร้างไฟล์ Excel พร้อมรูปภาพ...', 'success');
+
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('UPS_Checklist');
+
+      // กำหนดหัวตาราง
+      worksheet.columns = [
+        { header: 'Build', key: 'build', width: 15 },
+        { header: 'Floor', key: 'floor', width: 10 },
+        { header: 'Side', key: 'side', width: 15 },
+        { header: 'UPS', key: 'ups', width: 20 },
+        { header: 'Model / Serial No.', key: 'model_serial_no', width: 20 },
+        { header: 'Battery', key: 'battery', width: 20 },
+        { header: 'Battery Model / Serial No.', key: 'battery_model_serial_no', width: 22 },
+        { header: 'Capacity (VA/kVA)', key: 'capacity', width: 18 },
+        { header: 'Input Voltage (V)', key: 'input_voltage', width: 16 },
+        { header: 'Output Voltage (V)', key: 'output_voltage', width: 16 },
+        { header: 'Runtime Test (min)', key: 'runtime_test', width: 18 },
+        { header: 'Load (%)', key: 'load_percent', width: 12 },
+        { header: 'Status', key: 'status', width: 12 },
+        { header: 'Priority', key: 'priority', width: 12 },
+        { header: 'Inspection Date', key: 'inspection_date', width: 16 },
+        { header: 'Next PM Date', key: 'next_pm_date', width: 16 },
+        { header: 'Picture', key: 'picture_placeholder', width: 15 },
+        { header: 'Inspector', key: 'inspector', width: 15 },
+        { header: 'Remark', key: 'remark', width: 25 }
+      ];
+
+      // ปรับแต่งแถบหัวตาราง
+      worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFF' } };
+      worksheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '1E293B' } };
+
+      // ใส่ข้อมูลแถวลงตาราง
+      for (let i = 0; i < rawRecords.length; i++) {
+        const r = rawRecords[i];
+        const row = worksheet.addRow({
+          build: r.build,
+          floor: r.floor,
+          side: r.side,
+          ups: r.ups,
+          model_serial_no: r.model_serial_no,
+          battery: r.battery,
+          battery_model_serial_no: r.battery_model_serial_no,
+          capacity: r.capacity,
+          input_voltage: r.input_voltage,
+          output_voltage: r.output_voltage,
+          runtime_test: r.runtime_test,
+          load_percent: r.load_percent,
+          status: r.status,
+          priority: r.priority,
+          inspection_date: r.inspection_date,
+          next_pm_date: r.next_pm_date,
+          picture_placeholder: r.picture ? '' : '-',
+          inspector: r.inspector,
+          remark: r.remark
+        });
+
+        row.height = 60; // ปรับความสูงของแถวให้ขยายเพื่อโชว์รูปได้พอดี
+
+        // ถ้ามีรูปถ่าย บันทึกฝังวัตถุภาพลงในเซลล์ Picture (คอลัมน์ Q)
+        if (r.picture && r.picture.startsWith('data:image')) {
+          try {
+            const imageId = workbook.addImage({
+              base64: r.picture,
+              extension: 'jpeg',
+            });
+
+            worksheet.addImage(imageId, {
+              tl: { col: 16, row: i + 1 }, // คอลัมน์ Q (Index 16)
+              ext: { width: 70, height: 75 }
+            });
+          } catch (e) {
+            console.error('Add image error:', e);
+          }
+        }
+      }
+
+      // ดาวน์โหลดไฟล์ Excel ออกมา
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `UPS_Inspection_${new Date().toISOString().split('T')[0]}.xlsx`;
+      link.click();
     }
 
-    // ฟังก์ชัน Import อ่านค่าตรงตามหัวตาราง Excel ของคุณ
-    function importFromExcel(event) {
+    // 📥 ฟังก์ชัน IMPORT EXCEL ดึงทั้งข้อมูลและรูปภาพจากไฟล์ Excel (Read Embedded Images)
+    async function importFromExcel(event) {
       const file = event.target.files[0];
       if (!file) return;
 
       const reader = new FileReader();
       reader.onload = async function(e) {
         try {
-          const data = new Uint8Array(e.target.result);
-          const workbook = XLSX.read(data, { type: 'array' });
-          const firstSheetName = workbook.SheetNames[0];
-          const worksheet = workbook.Sheets[firstSheetName];
-          const jsonData = XLSX.utils.sheet_to_json(worksheet, { range: 2 }); // ข้าม 2 บรรทัดแรกไปอ่านที่ Row 3 (Header)
+          const arrayBuffer = e.target.result;
+          const workbook = new ExcelJS.Workbook();
+          await workbook.xlsx.load(arrayBuffer);
 
-          if (jsonData.length === 0) {
-            showToast('EMPTY', 'ไม่พบข้อมูลในไฟล์ Excel', 'error');
+          const worksheet = workbook.worksheets[0];
+          if (!worksheet) throw new Error('ไม่พบข้อมูล Sheet ในไฟล์');
+
+          // รวบรวมรูปภาพจากไฟล์ Excel
+          const imageMap = {};
+          worksheet.getImages().forEach(img => {
+            const imageObj = workbook.getImage(img.imageId);
+            const rowIdx = Math.floor(img.range.tl.row) + 1;
+            
+            if (imageObj && imageObj.buffer) {
+              const base64 = `data:image/${imageObj.extension || 'jpeg'};base64,` + 
+                btoa(String.fromCharCode.apply(null, new Uint8Array(imageObj.buffer)));
+              imageMap[rowIdx] = base64;
+            }
+          });
+
+          // ค้นหาแถบหัวตาราง (Header)
+          let headerRowIdx = -1;
+          worksheet.eachRow((row, rowNumber) => {
+            const rowStr = row.values.join(' ').toLowerCase();
+            if (headerRowIdx === -1 && (rowStr.includes('build') || rowStr.includes('ups') || rowStr.includes('serial'))) {
+              headerRowIdx = rowNumber;
+            }
+          });
+
+          if (headerRowIdx === -1) headerRowIdx = 1;
+
+          const headers = {};
+          worksheet.getRow(headerRowIdx).eachCell((cell, colNumber) => {
+            headers[colNumber] = String(cell.value || '').trim();
+          });
+
+          const recordsToInsert = [];
+
+          worksheet.eachRow((row, rowNumber) => {
+            if (rowNumber <= headerRowIdx) return; // ข้ามแถวที่เป็น Header
+
+            const rowData = {};
+            row.eachCell((cell, colNumber) => {
+              const hName = headers[colNumber];
+              if (hName) rowData[hName] = cell.value;
+            });
+
+            const getVal = (possibleNames, defaultVal = '') => {
+              for (const name of possibleNames) {
+                const foundKey = Object.keys(rowData).find(k => k.toLowerCase().replace(/[^a-z0-9]/g, '').includes(name.toLowerCase().replace(/[^a-z0-9]/g, '')));
+                if (foundKey && rowData[foundKey] !== undefined && rowData[foundKey] !== null) {
+                  return String(rowData[foundKey]).trim();
+                }
+              }
+              return defaultVal;
+            };
+
+            const build = getVal(['build', 'อาคาร']);
+            const upsSN = getVal(['model/serialno', 'modelserialno', 'ซีเรียลups', 'sn']);
+
+            if (!build && !upsSN) return;
+
+            // ดึงรูปภาพประจำแถว (ถ้ามีรูปฝังอยู่)
+            const extractedImage = imageMap[rowNumber] || '';
+
+            recordsToInsert.push({
+              build: build,
+              floor: getVal(['floor', 'ชั้น']),
+              side: getVal(['side', 'ตำแหน่ง', 'ฝั่ง']),
+              ups: getVal(['ups'], 'SRVPM2KRIL'),
+              model_serial_no: upsSN,
+              battery: getVal(['battery'], 'SRV72RLBP-9A'),
+              battery_model_serial_no: getVal(['batterymodelserialno', 'ซีเรียลแบต']),
+              capacity: getVal(['capacity', 'ความจุ']),
+              input_voltage: getVal(['inputvoltage', 'ไฟเข้า']),
+              output_voltage: getVal(['outputvoltage', 'ไฟออก']),
+              runtime_test: getVal(['runtimetest', 'เวลาทดสอบ']),
+              load_percent: getVal(['load', 'โหลด']),
+              status: getVal(['status', 'สถานะ'], 'OK'),
+              priority: getVal(['priority', 'ความสำคัญ'], 'Low'),
+              inspection_date: todayFormatted,
+              next_pm_date: null,
+              picture: extractedImage,
+              inspector: getVal(['inspector', 'ผู้ตรวจ']),
+              remark: getVal(['remark', 'หมายเหตุ'])
+            });
+          });
+
+          if (recordsToInsert.length === 0) {
+            showToast('EMPTY', 'ไม่พบข้อมูลแถวในตาราง Excel', 'error');
             return;
           }
-
-          const recordsToInsert = jsonData.map(row => ({
-            build: String(row['Build'] || row['อาคาร'] || ''),
-            floor: String(row['Floor'] || row['ชั้น'] || ''),
-            side: String(row['Side'] || row['ตำแหน่ง'] || ''),
-            ups: String(row['UPS'] || 'SRVPM2KRIL'),
-            model_serial_no: String(row['Model / Serial No.'] || row['ซีเรียล UPS'] || ''),
-            battery: String(row['Battery'] || 'SRV72RLBP-9A'),
-            battery_model_serial_no: String(row['Model / Serial No._1'] || row['Battery Model / Serial No.'] || row['ซีเรียลแบต'] || ''),
-            capacity: String(row['Capacity (VA/kVA)'] || row['ความจุ'] || ''),
-            input_voltage: String(row['Input Voltage (V)'] || row['ไฟเข้า'] || ''),
-            output_voltage: String(row['Output Voltage (V)'] || row['ไฟออก'] || ''),
-            runtime_test: String(row['Runtime Test (min)'] || row['เวลาทดสอบ'] || ''),
-            load_percent: String(row['Load (%)'] || row['โหลด'] || ''),
-            status: String(row['Status'] || row['สถานะ'] || 'OK'),
-            priority: String(row['Priority'] || row['ความสำคัญ'] || 'Low'),
-            inspection_date: row['Inspection Date'] || row['วันที่ตรวจ'] || todayFormatted,
-            next_pm_date: row['Next PM Date'] || row['กำหนด PM'] || null,
-            inspector: String(row['Inspector'] || row['ผู้ตรวจ'] || ''),
-            remark: String(row['Remark'] || row['หมายเหตุ'] || '')
-          }));
 
           const { error } = await supabaseClient.from('ups_inspections').insert(recordsToInsert);
           if (error) throw error;
 
-          showToast('SUCCESS', `นำเข้าข้อมูลเรียบร้อย ${recordsToInsert.length} รายการ`, 'success');
+          showToast('SUCCESS', `นำเข้าข้อมูลและรูปภาพเรียบร้อย ${recordsToInsert.length} รายการ`, 'success');
           fetchRecords();
         } catch (err) {
-          showToast('ERROR', err.message || 'เกิดข้อผิดพลาดในการอ่านไฟล์', 'error');
+          showToast('ERROR', err.message || 'เกิดข้อผิดพลาดในการนำเข้าไฟล์', 'error');
         } finally {
           event.target.value = '';
         }
