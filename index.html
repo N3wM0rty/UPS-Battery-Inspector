@@ -8,7 +8,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   
-  <!-- ExcelJS Library สำหรับฝังรูปและดึงรูปจาก Excel -->
+  <!-- ExcelJS Library -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
@@ -18,6 +18,25 @@
     .mini-btn:hover { opacity: 0.9; transform: translateY(-1px); }
     .mini-input { background-color: #ffffff !important; color: #0f172a !important; border: 1px solid #cbd5e1 !important; }
     .mini-input:focus { border-color: #0f172a !important; outline: none; box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.1); }
+    
+    /* แก้ไขปัญหาวันที่บนไอโฟน (iOS/Safari) บังหน้าจอ */
+    input[type="date"] {
+      position: relative;
+      -webkit-appearance: none;
+      min-height: 2.5rem;
+    }
+    input[type="date"]::-webkit-calendar-picker-indicator {
+      background: transparent;
+      bottom: 0;
+      color: transparent;
+      height: auto;
+      left: 0;
+      position: absolute;
+      right: 0;
+      top: 0;
+      width: auto;
+    }
+
     @keyframes slideInRight { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
     .toast-slide-in { animation: slideInRight 0.3s ease-out forwards; }
   </style>
@@ -317,7 +336,6 @@
     const todayFormatted = today.toISOString().split('T')[0];
     document.getElementById('inspectionDate').value = todayFormatted;
 
-    // ฟังก์ชันแปลงค่าวันที่จาก Excel เป็น YYYY-MM-DD
     function parseExcelDate(val) {
       if (!val) return todayFormatted;
       if (val instanceof Date) {
@@ -339,6 +357,16 @@
         return `${year}-${month}-${day}`;
       }
       return todayFormatted;
+    }
+
+    function bufferToBase64(buffer) {
+      let binary = '';
+      const bytes = new Uint8Array(buffer);
+      const len = bytes.byteLength;
+      for (let i = 0; i < len; i += 8192) {
+        binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 8192));
+      }
+      return btoa(binary);
     }
 
     document.getElementById('inspectionForm').addEventListener('submit', async (e) => {
@@ -461,7 +489,6 @@
       }
     }
 
-    // 🚀 EXPORT EXCEL แบบฝังรูปภาพลงในไฟล์ (Embedded Image)
     async function exportToExcel() {
       if (rawRecords.length === 0) return showToast('EMPTY', 'ไม่มีข้อมูลให้ส่งออก', 'error');
 
@@ -546,10 +573,11 @@
       link.click();
     }
 
-    // 📥 IMPORT EXCEL พร้อมแปลง Date อัตโนมัติ
     async function importFromExcel(event) {
       const file = event.target.files[0];
       if (!file) return;
+
+      showToast('IMPORTING', 'กำลังอ่านข้อมูลและดึงรูปภาพจาก Excel...', 'success');
 
       const reader = new FileReader();
       reader.onload = async function(e) {
@@ -562,21 +590,27 @@
           if (!worksheet) throw new Error('ไม่พบข้อมูล Sheet ในไฟล์');
 
           const imageMap = {};
-          worksheet.getImages().forEach(img => {
-            const imageObj = workbook.getImage(img.imageId);
-            const rowIdx = Math.floor(img.range.tl.row) + 1;
-            
-            if (imageObj && imageObj.buffer) {
-              const base64 = `data:image/${imageObj.extension || 'jpeg'};base64,` + 
-                btoa(String.fromCharCode.apply(null, new Uint8Array(imageObj.buffer)));
-              imageMap[rowIdx] = base64;
-            }
-          });
+          if (worksheet.getImages) {
+            worksheet.getImages().forEach(img => {
+              const imageObj = workbook.getImage(img.imageId);
+              const rowIdx = Math.floor(img.range.tl.row) + 1;
+              
+              if (imageObj && imageObj.buffer) {
+                try {
+                  const base64Str = bufferToBase64(imageObj.buffer);
+                  const ext = imageObj.extension || 'jpeg';
+                  imageMap[rowIdx] = `data:image/${ext};base64,${base64Str}`;
+                } catch (err) {
+                  console.error('Image convert error:', err);
+                }
+              }
+            });
+          }
 
           let headerRowIdx = -1;
           worksheet.eachRow((row, rowNumber) => {
-            const rowStr = row.values.join(' ').toLowerCase();
-            if (headerRowIdx === -1 && (rowStr.includes('build') || rowStr.includes('ups') || rowStr.includes('serial'))) {
+            const rowValues = Array.isArray(row.values) ? row.values.join(' ').toLowerCase() : '';
+            if (headerRowIdx === -1 && (rowValues.includes('build') || rowValues.includes('ups') || rowValues.includes('serial'))) {
               headerRowIdx = rowNumber;
             }
           });
@@ -585,7 +619,9 @@
 
           const headers = {};
           worksheet.getRow(headerRowIdx).eachCell((cell, colNumber) => {
-            headers[colNumber] = String(cell.value || '').trim();
+            const rawVal = cell.value;
+            const strVal = (typeof rawVal === 'object' && rawVal !== null) ? (rawVal.result || rawVal.text || '') : String(rawVal || '');
+            headers[colNumber] = strVal.trim();
           });
 
           const recordsToInsert = [];
@@ -596,7 +632,11 @@
             const rowData = {};
             row.eachCell((cell, colNumber) => {
               const hName = headers[colNumber];
-              if (hName) rowData[hName] = cell.value;
+              if (hName) {
+                const cVal = cell.value;
+                const finalVal = (typeof cVal === 'object' && cVal !== null) ? (cVal.result || cVal.text || '') : cVal;
+                rowData[hName] = finalVal;
+              }
             });
 
             const getVal = (possibleNames, defaultVal = '') => {
