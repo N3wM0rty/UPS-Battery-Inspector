@@ -317,6 +317,30 @@
     const todayFormatted = today.toISOString().split('T')[0];
     document.getElementById('inspectionDate').value = todayFormatted;
 
+    // ฟังก์ชันแปลงค่าวันที่จาก Excel เป็น YYYY-MM-DD
+    function parseExcelDate(val) {
+      if (!val) return todayFormatted;
+      if (val instanceof Date) {
+        return val.toISOString().split('T')[0];
+      }
+      if (typeof val === 'number') {
+        const utc_days = Math.floor(val - 25569);
+        const utc_value = utc_days * 86400;
+        const date_info = new Date(utc_value * 1000);
+        return date_info.toISOString().split('T')[0];
+      }
+      const strVal = String(val).trim();
+      const d = new Date(strVal);
+      if (!isNaN(d.getTime())) {
+        let year = d.getFullYear();
+        if (year > 2400) year -= 543;
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      }
+      return todayFormatted;
+    }
+
     document.getElementById('inspectionForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const submitBtn = document.getElementById('submitBtn');
@@ -437,7 +461,7 @@
       }
     }
 
-    // 🚀 ฟังก์ชัน EXPORT EXCEL แบบฝังรูปภาพลงในไฟล์ (Embedded Image using ExcelJS)
+    // 🚀 EXPORT EXCEL แบบฝังรูปภาพลงในไฟล์ (Embedded Image)
     async function exportToExcel() {
       if (rawRecords.length === 0) return showToast('EMPTY', 'ไม่มีข้อมูลให้ส่งออก', 'error');
 
@@ -446,7 +470,6 @@
       const workbook = new ExcelJS.Workbook();
       const worksheet = workbook.addWorksheet('UPS_Checklist');
 
-      // กำหนดหัวตาราง
       worksheet.columns = [
         { header: 'Build', key: 'build', width: 15 },
         { header: 'Floor', key: 'floor', width: 10 },
@@ -469,11 +492,9 @@
         { header: 'Remark', key: 'remark', width: 25 }
       ];
 
-      // ปรับแต่งแถบหัวตาราง
       worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFF' } };
       worksheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '1E293B' } };
 
-      // ใส่ข้อมูลแถวลงตาราง
       for (let i = 0; i < rawRecords.length; i++) {
         const r = rawRecords[i];
         const row = worksheet.addRow({
@@ -498,9 +519,8 @@
           remark: r.remark
         });
 
-        row.height = 60; // ปรับความสูงของแถวให้ขยายเพื่อโชว์รูปได้พอดี
+        row.height = 60;
 
-        // ถ้ามีรูปถ่าย บันทึกฝังวัตถุภาพลงในเซลล์ Picture (คอลัมน์ Q)
         if (r.picture && r.picture.startsWith('data:image')) {
           try {
             const imageId = workbook.addImage({
@@ -509,7 +529,7 @@
             });
 
             worksheet.addImage(imageId, {
-              tl: { col: 16, row: i + 1 }, // คอลัมน์ Q (Index 16)
+              tl: { col: 16, row: i + 1 },
               ext: { width: 70, height: 75 }
             });
           } catch (e) {
@@ -518,16 +538,15 @@
         }
       }
 
-      // ดาวน์โหลดไฟล์ Excel ออกมา
       const buffer = await workbook.xlsx.writeBuffer();
       const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
-      link.download = `UPS_Inspection_${new Date().toISOString().split('T')[0]}.xlsx`;
+      link.download = `UPS_Inspection_${todayFormatted}.xlsx`;
       link.click();
     }
 
-    // 📥 ฟังก์ชัน IMPORT EXCEL ดึงทั้งข้อมูลและรูปภาพจากไฟล์ Excel (Read Embedded Images)
+    // 📥 IMPORT EXCEL พร้อมแปลง Date อัตโนมัติ
     async function importFromExcel(event) {
       const file = event.target.files[0];
       if (!file) return;
@@ -542,7 +561,6 @@
           const worksheet = workbook.worksheets[0];
           if (!worksheet) throw new Error('ไม่พบข้อมูล Sheet ในไฟล์');
 
-          // รวบรวมรูปภาพจากไฟล์ Excel
           const imageMap = {};
           worksheet.getImages().forEach(img => {
             const imageObj = workbook.getImage(img.imageId);
@@ -555,7 +573,6 @@
             }
           });
 
-          // ค้นหาแถบหัวตาราง (Header)
           let headerRowIdx = -1;
           worksheet.eachRow((row, rowNumber) => {
             const rowStr = row.values.join(' ').toLowerCase();
@@ -574,7 +591,7 @@
           const recordsToInsert = [];
 
           worksheet.eachRow((row, rowNumber) => {
-            if (rowNumber <= headerRowIdx) return; // ข้ามแถวที่เป็น Header
+            if (rowNumber <= headerRowIdx) return;
 
             const rowData = {};
             row.eachCell((cell, colNumber) => {
@@ -597,8 +614,9 @@
 
             if (!build && !upsSN) return;
 
-            // ดึงรูปภาพประจำแถว (ถ้ามีรูปฝังอยู่)
             const extractedImage = imageMap[rowNumber] || '';
+            const rawInspectionDate = rowData['Inspection Date'] || rowData['วันที่ตรวจ'];
+            const rawNextPmDate = rowData['Next PM Date'] || rowData['กำหนด PM'];
 
             recordsToInsert.push({
               build: build,
@@ -615,8 +633,8 @@
               load_percent: getVal(['load', 'โหลด']),
               status: getVal(['status', 'สถานะ'], 'OK'),
               priority: getVal(['priority', 'ความสำคัญ'], 'Low'),
-              inspection_date: todayFormatted,
-              next_pm_date: null,
+              inspection_date: parseExcelDate(rawInspectionDate),
+              next_pm_date: rawNextPmDate ? parseExcelDate(rawNextPmDate) : null,
               picture: extractedImage,
               inspector: getVal(['inspector', 'ผู้ตรวจ']),
               remark: getVal(['remark', 'หมายเหตุ'])
