@@ -19,7 +19,7 @@
     .mini-input { background-color: #ffffff !important; color: #0f172a !important; border: 1px solid #cbd5e1 !important; }
     .mini-input:focus { border-color: #0f172a !important; outline: none; box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.1); }
     
-    /* แก้ไขปัญหาวันที่บนไอโฟน (iOS/Safari) บังหน้าจอ */
+    /* แก้ไขปัญหาวันที่บนไอโฟน (iOS/Safari) */
     input[type="date"] {
       position: relative;
       -webkit-appearance: none;
@@ -219,7 +219,8 @@
     <!-- LIST SECTION -->
     <div id="viewList" class="hidden space-y-4">
       <div class="mini-card p-5 space-y-4">
-        <div class="flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <!-- HEADER ACTION -->
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-100 pb-4">
           <div class="flex items-center gap-2">
             <h2 class="text-base font-semibold text-slate-900">รายการประวัติการตรวจสอบ</h2>
             <span id="recordCount" class="bg-slate-100 text-slate-600 text-xs px-2.5 py-0.5 rounded-full font-medium">0 รายการ</span>
@@ -235,6 +236,26 @@
           </div>
         </div>
 
+        <!-- FILTER & SEARCH BAR SECTION -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 bg-slate-50 p-3 rounded-xl border border-slate-100">
+          <div>
+            <label class="block text-[11px] font-medium text-slate-500 mb-1"><i class="fa-solid fa-building mr-1"></i> กรองตามอาคาร (Build)</label>
+            <select id="filterBuild" onchange="filterRecords()" class="w-full mini-input rounded-xl p-2 text-xs">
+              <option value="">ทั้งหมดทุกอาคาร</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-[11px] font-medium text-slate-500 mb-1"><i class="fa-solid fa-magnifying-glass mr-1"></i> ค้นหาข้อมูล</label>
+            <input type="text" id="searchInput" onkeyup="filterRecords()" placeholder="พิมพ์ชื่อ UPS, S/N, หรือชื่อผู้ตรวจ..." class="w-full mini-input rounded-xl p-2 text-xs">
+          </div>
+          <div class="flex items-end">
+            <button onclick="resetFilters()" class="w-full bg-slate-200 hover:bg-slate-300 text-slate-700 mini-btn py-2 rounded-xl text-xs font-medium flex items-center justify-center gap-1">
+              <i class="fa-solid fa-rotate-left"></i> ล้างการกรอง
+            </button>
+          </div>
+        </div>
+
+        <!-- TABLE SECTION -->
         <div class="overflow-x-auto rounded-xl border border-slate-100">
           <table class="w-full text-left text-xs text-slate-700">
             <thead class="bg-slate-50 text-slate-500 font-medium text-[11px] uppercase border-b border-slate-100">
@@ -268,6 +289,7 @@
     }
 
     let rawRecords = [];
+    let filteredRecords = [];
     let currentBase64Image = '';
 
     function applyModelPreset() {
@@ -425,18 +447,68 @@
         const { data, error } = await supabaseClient.from('ups_inspections').select('*').order('created_at', { ascending: false });
         if (error) throw error;
         rawRecords = data || [];
-        document.getElementById('recordCount').innerText = `${rawRecords.length} รายการ`;
-        renderTable();
+        populateBuildFilter();
+        filterRecords();
       } catch (err) {
         showToast('ERROR', err.message || 'ดึงข้อมูลไม่สำเร็จ', 'error');
       }
+    }
+
+    // ฟังก์ชันสร้างตัวเลือกรายการอาคาร (Dynamic Build Filter Options)
+    function populateBuildFilter() {
+      const select = document.getElementById('filterBuild');
+      const currentValue = select.value;
+      
+      const builds = [...new Set(rawRecords.map(r => r.build).filter(Boolean))].sort();
+      select.innerHTML = '<option value="">ทั้งหมดทุกอาคาร</option>';
+      
+      builds.forEach(b => {
+        const opt = document.createElement('option');
+        opt.value = b;
+        opt.textContent = b;
+        select.appendChild(opt);
+      });
+
+      select.value = currentValue;
+    }
+
+    // ฟังก์ชันกรองข้อมูลตามอาคาร และ ค้นหาข้อความ
+    function filterRecords() {
+      const selectedBuild = document.getElementById('filterBuild').value;
+      const searchText = document.getElementById('searchInput').value.toLowerCase().trim();
+
+      filteredRecords = rawRecords.filter(r => {
+        const matchBuild = !selectedBuild || r.build === selectedBuild;
+        
+        const searchTarget = [
+          r.build, r.floor, r.side, r.ups, r.model_serial_no,
+          r.battery, r.battery_model_serial_no, r.inspector, r.remark
+        ].filter(Boolean).join(' ').toLowerCase();
+
+        const matchSearch = !searchText || searchTarget.includes(searchText);
+        return matchBuild && matchSearch;
+      });
+
+      document.getElementById('recordCount').innerText = `${filteredRecords.length} / ${rawRecords.length} รายการ`;
+      renderTable();
+    }
+
+    function resetFilters() {
+      document.getElementById('filterBuild').value = '';
+      document.getElementById('searchInput').value = '';
+      filterRecords();
     }
 
     function renderTable() {
       const tbody = document.getElementById('inspectionTableBody');
       tbody.innerHTML = '';
 
-      rawRecords.forEach(r => {
+      if (filteredRecords.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" class="p-8 text-center text-slate-400">ไม่พบข้อมูลตามเงื่อนไขที่เลือก</td></tr>`;
+        return;
+      }
+
+      filteredRecords.forEach(r => {
         const tr = document.createElement('tr');
         tr.className = "hover:bg-slate-50 transition-colors";
         
@@ -490,7 +562,8 @@
     }
 
     async function exportToExcel() {
-      if (rawRecords.length === 0) return showToast('EMPTY', 'ไม่มีข้อมูลให้ส่งออก', 'error');
+      const recordsToExport = filteredRecords.length > 0 ? filteredRecords : rawRecords;
+      if (recordsToExport.length === 0) return showToast('EMPTY', 'ไม่มีข้อมูลให้ส่งออก', 'error');
 
       showToast('EXPORTING', 'กำลังสร้างไฟล์ Excel พร้อมรูปภาพ...', 'success');
 
@@ -522,8 +595,8 @@
       worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFF' } };
       worksheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '1E293B' } };
 
-      for (let i = 0; i < rawRecords.length; i++) {
-        const r = rawRecords[i];
+      for (let i = 0; i < recordsToExport.length; i++) {
+        const r = recordsToExport[i];
         const row = worksheet.addRow({
           build: r.build,
           floor: r.floor,
